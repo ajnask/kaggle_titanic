@@ -1,7 +1,6 @@
 setwd("H:/Data Science/Kaggle/Titanic/")
 library(ggplot2)
 library(stringr)
-answer <- read.csv("answer.csv")
 train <- read.csv("train.csv", na.strings = c("NA","","NaN"))
 test <- read.csv("test.csv", na.strings = c("NA","","NaN"))
 test$Survived <- NA
@@ -19,11 +18,6 @@ ggplot(titanic, aes(Title,Age)) + geom_boxplot()
 #Title
 
 titanic$Name <- as.character(titanic$Name)
-# names <- gsub(pattern = "[[:punct:]]+", replacement = " ",x = titanic$Name)
-# names <- gsub(pattern = "  ", replacement = " ",x = names)
-# names <- gsub(pattern = " $", replacement = " ",x = names)
-# VIP <- c("Capt","Col","Don","Dona","Dr","Jonkheer","Lady","Major",
-#          "Mlle", "Mme","Rev","Sir","the Countess")
 
 titanic$Title <- gsub('(.*, )|(\\..*)', '', titanic$Name)
 # (.*, ) remove all chars before a comma+space and (\\..*) removes all chars after a point(.)
@@ -77,7 +71,6 @@ levels(titanic$Embarked) <- c("Cherbourg","Queenstown","Southampton")
 
 #Cabin status
 #For now, let's assume that rather than cabin number, the availability of cabin is more important.
-
 # titanic$CabinStatus <- ifelse(is.na(titanic$Cabin),"N","Y") 
 
 titanic$Cabin <- substr(gsub("[^[:alpha:]]+","",titanic$Cabin),1,1)
@@ -98,36 +91,6 @@ charvars <- c("Ticket","Cabin","Title","Singleton","SmallFamily",
               "BigFamily","Surname","FamilyID")
 titanic[,charvars] <- lapply(titanic[,charvars],as.factor)
 rm(Agefit,charvars)
-# 
-# library(missForest)
-# titanic_impute <- titanic[,-c(1,2,4,7,8,11)]
-# 
-# set.seed(555)
-# trainmis <- missForest(titanic_impute,
-#                        verbose = FALSE,
-#                        ntree = 500,
-#                        mtry = 3,
-#                        variablewise = TRUE)
-
-# m <- c(1:6)
-# tree <- c(50,150,250,350,500)
-# errortable <- NULL
-# for(i in m){
-#         for(j in tree){
-#                 set.seed(555)
-#                 trainmis <-missForest(titanic_impute,
-#                                       verbose = FALSE,
-#                                       ntree = j,
-#                                       mtry = i,
-#                                       variablewise = TRUE)
-#                 errortable <- rbind(errortable,cbind(t(trainmis$OOBerror),i,j))
-#         }
-# }
-
-# titanic_impute <- trainmis$ximp
-# rm(trainmis,i,j,m,tree)
-# 
-# imputed_combined <- data.frame(titanic_impute,Survived = titanic$Survived)
 
 ## Model training
 titanic_clean <- titanic[!is.na(titanic$Survived),]
@@ -137,46 +100,6 @@ ind <- sample(x = 1:nrow(titanic_clean),size = round(0.8*nrow(titanic_clean)),re
 train <- titanic_clean[ind,]
 test <- titanic_clean[-ind,]
 rm(ind)
-
-library(gbm)
-train <- titanic_clean[,c(predictors,response)]
-test <- test_clean[,predictors]
-
-tree <- c(150,250,500,700,1000)
-rate <- seq(0.05,0.2,0.01)
-depth <- c(1,2,3,4)
-fraction <- seq(0.1,1,0.1)
-nodes <- 1:5
-accuracytable <- NULL
-train$Survived <- as.numeric(as.character(train$Survived))
-for(i in tree){
-        for(j in rate){
-                for(k in depth){
-                        for(l in fraction){
-                                for(m in nodes){
-                                        set.seed(1)
-                                        boost.model <- gbm(Survived~.,
-                                                           data= train,
-                                                           distribution = "bernoulli",
-                                                           n.trees=i,
-                                                           interaction.depth = k,
-                                                           shrinkage = j,
-                                                           bag.fraction = l,
-                                                           n.minobsinnode = m)
-                                        boost.predict <- round(predict(boost.model,
-                                                                 newdata = test,
-                                                                 n.trees = i,
-                                                                 type='response'))
-                                        accuracy <- sum(answer$Survived==boost.predict)/nrow(test)
-                                        accuracytable <- rbind(accuracytable,cbind(accuracy,i,j,k,l,m))
-                                }
-
-                        }
-
-                }
-        }
-}
-rm(accuracy,i,j,k,l,m,nodes,fraction,depth,rate,tree,boost.model,boost.predict)
 
 set.seed(555)
 gbmmodel <- gbm(Survived~.,
@@ -207,25 +130,6 @@ write.csv(x = submission,file = "submission.csv",row.names = FALSE)
 #Random Forest training
 library(randomForest)
 
-# m <- c(1:9)
-# tree <- c(50,150,250,350,500)
-# accuracytable <- NULL
-# for(i in m){
-#         for(j in tree){
-#                 set.seed(555)
-#                 model <-randomForest(Survived~. ,
-#                                      data = train,
-#                                      ntree = j,
-#                                      mtry = i,
-#                                      variablewise = TRUE)
-#                 predict <- predict(model,
-#                                    newdata = test,
-#                                    type='response')
-#                 accuracy <- sum(test$Survived==predict)/nrow(test)
-#                 accuracytable <- rbind(accuracytable,cbind(accuracy,i,j))
-#         }
-# }
-
 rfmodel <- randomForest(Survived ~.,
                         data = train,
                         ntree = 150,
@@ -250,7 +154,7 @@ partymodel <- cforest(Survived~Pclass + Sex + Age + SibSp + Parch + Fare +
                       controls = cforest_unbiased(ntree = 2000,mtry =3))
 Prediction <- predict(partymodel, test_clean, OOB=TRUE, type = "response")
 submission <- data.frame(PassengerId = test_clean$PassengerId,Survived = Prediction)
-write.csv(x = submission,file = "partysubmission.csv",row.names = FALSE)
+write.csv(x = submission,file = "cforest.csv",row.names = FALSE)
 
 #rf new
 library(randomForest)
@@ -442,46 +346,6 @@ xgb <- xgboost(data = data.matrix(sparse_matrix),
                )
 
 
-#
-# tree <- c(100,150,250,500)
-# rate <- seq(0.05,0.2,0.01)
-# depth <- c(1,2,3,4)
-# fraction <- seq(0.1,1,0.1)
-# nodes <- 1:5
-# accuracytable <- NULL
-# for(i in tree){
-#         for(j in rate){
-#                 for(k in depth){
-#                         for(l in fraction){
-#                                 for(m in nodes){
-#                                         set.seed(555)
-#                                         boost.model <- xgboost(data = data.matrix(sparse_matrix),
-#                                                                label = y,
-#                                                                eta = 0.1,
-#                                                                max_depth = 15,
-#                                                                nround=25,
-#                                                                subsample = 0.5,
-#                                                                colsample_bytree = 0.5,
-#                                                                seed = 400,
-#                                                                eval_metric = "error",
-#                                                                objective = "binary:logistic"
-#                                         )
-#                                         boost.predict <- round(predict(boost.model,
-#                                                                        newdata = test,
-#                                                                        n.trees = i,
-#                                                                        type='response'))
-#                                         accuracy <- sum(test$Survived==boost.predict)/nrow(test)
-#                                         accuracytable <- rbind(accuracytable,cbind(accuracy,i,j,k,l,m))
-#                                 }
-#
-#                         }
-#
-#                 }
-#         }
-# }
-# rm(accuracy,i,j,k,l,m,nodes,fraction,depth,rate,tree,boost.model,boost.predict)
-
-
 Survived <- round(predict(object = xgb,newdata = as.matrix(sparse_test)))
 
 library(caret)
@@ -517,8 +381,6 @@ Survived <- round((Survived1+Survived2+Survived3)/3)
 
 Survived <- predict(object = cforest, newdata = as.matrix(sparse_test))
 
-# Result
-sum(Survived==answer$Survived)/nrow(answer)
 
 
 
